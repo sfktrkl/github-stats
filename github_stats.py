@@ -2,11 +2,10 @@
 
 import asyncio
 import os
-from typing import Dict, List, Optional, Set, Tuple, Any, cast
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 import aiohttp
 import requests
-
 
 ###############################################################################
 # Main Classes
@@ -73,7 +72,13 @@ class Queries(object):
         :return: deserialized REST JSON output
         """
 
-        for _ in range(60):
+        max_retries_str = os.getenv("MAX_RETRIES", "5")
+        try:
+            max_retries = int(max_retries_str)
+        except (ValueError, TypeError):
+            max_retries = 5
+
+        for _ in range(max_retries):
             headers = {
                 "Authorization": f"token {self.access_token}",
             }

@@ -8,7 +8,6 @@ import aiohttp
 
 from github_stats import Stats
 
-
 ################################################################################
 # Helper Functions
 ################################################################################
@@ -39,8 +38,20 @@ async def generate_overview(s: Stats) -> None:
     output = re.sub("{{ stars }}", f"{await s.stargazers:,}", output)
     output = re.sub("{{ forks }}", f"{await s.forks:,}", output)
     output = re.sub("{{ contributions }}", f"{await s.total_contributions:,}", output)
-    changed = (await s.lines_changed)[0] + (await s.lines_changed)[1]
-    output = re.sub("{{ lines_changed }}", f"{changed:,}", output)
+
+    # Respect EXCLUDE_LINES_CHANGED env var to skip expensive contributor API calls
+    if os.getenv("EXCLUDE_LINES_CHANGED", "false").strip().lower() == "true":
+        # Remove the entire lines-changed row from the SVG
+        output = re.sub(
+            r"<!--\s*BEGIN_LINES_CHANGED\s*-->.*?<!--\s*END_LINES_CHANGED\s*-->",
+            "",
+            output,
+            flags=re.DOTALL,
+        )
+    else:
+        changed = (await s.lines_changed)[0] + (await s.lines_changed)[1]
+        output = re.sub("{{ lines_changed }}", f"{changed:,}", output)
+
     output = re.sub("{{ views }}", f"{await s.views:,}", output)
     output = re.sub("{{ repos }}", f"{len(await s.repos):,}", output)
 

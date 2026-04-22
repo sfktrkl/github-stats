@@ -2,6 +2,7 @@
 """GitHub statistics retrieval using GraphQL and REST APIs."""
 
 import asyncio
+import datetime
 import os
 from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
@@ -264,6 +265,24 @@ query {{
 }}
 """
 
+    @staticmethod
+    def commits_this_year(year: int) -> str:
+        """
+        :return: GraphQL query for total commit contributions in the given year
+        """
+        return f"""
+query {{
+  viewer {{
+    contributionsCollection(
+      from: "{year}-01-01T00:00:00Z",
+      to: "{year + 1}-01-01T00:00:00Z"
+    ) {{
+      totalCommitContributions
+    }}
+  }}
+}}
+"""
+
 
 class Stats:
     """
@@ -294,6 +313,7 @@ class Stats:
         self._repos: Optional[Set[str]] = None
         self._lines_changed: Optional[Tuple[int, int]] = None
         self._views: Optional[int] = None
+        self._commits_this_year: Optional[int] = None
 
     async def to_str(self) -> str:
         """
@@ -494,6 +514,24 @@ Languages:
                 "totalContributions", 0
             )
         return cast(int, self._total_contributions)
+
+    @property
+    async def commits_this_year(self) -> int:
+        """
+        :return: total commit contributions by the user in the current calendar year
+        """
+        if self._commits_this_year is not None:
+            return self._commits_this_year
+        year = datetime.date.today().year
+        result = (
+            (await self.queries.query(Queries.commits_this_year(year)))
+            .get("data", {})
+            .get("viewer", {})
+            .get("contributionsCollection", {})
+            .get("totalCommitContributions", 0)
+        )
+        self._commits_this_year = result
+        return self._commits_this_year
 
     @property
     async def lines_changed(self) -> Tuple[int, int]:

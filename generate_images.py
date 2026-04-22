@@ -40,7 +40,16 @@ async def generate_overview(s: Stats) -> None:
             output,
             flags=re.DOTALL,
         )
+        output = re.sub(
+            "{{ commits_this_year }}", f"{await s.commits_this_year:,}", output
+        )
     else:
+        output = re.sub(
+            r"<!--\s*BEGIN_COMMITS_THIS_YEAR\s*-->.*?<!--\s*END_COMMITS_THIS_YEAR\s*-->",
+            "",
+            output,
+            flags=re.DOTALL,
+        )
         changed = (await s.lines_changed)[0] + (await s.lines_changed)[1]
         output = re.sub("{{ lines_changed }}", f"{changed:,}", output)
 

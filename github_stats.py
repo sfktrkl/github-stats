@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+"""GitHub statistics retrieval using GraphQL and REST APIs."""
 
 import asyncio
 import os
@@ -7,12 +8,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, cast
 import aiohttp
 import requests
 
-###############################################################################
-# Main Classes
-###############################################################################
 
-
-class Queries(object):
+class Queries:
     """
     Class with functions to query the GitHub GraphQL (v4) API and the REST (v3)
     API. Also includes functions to dynamically generate GraphQL queries.
@@ -50,7 +47,7 @@ class Queries(object):
             result = await r_async.json()
             if result is not None:
                 return result
-        except:
+        except aiohttp.ClientError:
             print("aiohttp failed for GraphQL query")
             # Fall back on non-async requests
             async with self.semaphore:
@@ -58,11 +55,12 @@ class Queries(object):
                     "https://api.github.com/graphql",
                     headers=headers,
                     json={"query": generated_query},
+                    timeout=30,
                 )
                 result = r_requests.json()
                 if result is not None:
                     return result
-        return dict()
+        return {}
 
     async def query_rest(
         self, path: str, params: Optional[Dict] = None, warm: bool = False
@@ -82,7 +80,7 @@ class Queries(object):
             max_retries = 5
 
         if params is None:
-            params = dict()
+            params = {}
         if path.startswith("/"):
             path = path[1:]
 
@@ -103,8 +101,9 @@ class Queries(object):
 
                 if r_async.status == 202:
                     if warm:
-                        return dict()
-                    print(f"Path {path} returned 202. Retrying in {2**attempt}s...")
+                        return {}
+                    print(
+                        f"Path {path} returned 202. Retrying in {2**attempt}s...")
                     await asyncio.sleep(2**attempt)
                     continue
 
@@ -112,7 +111,7 @@ class Queries(object):
                     result = await r_async.json()
                     return result if result is not None else {}
 
-            except:
+            except aiohttp.ClientError:
                 print(f"aiohttp failed for rest query to {path}")
                 # Fall back on non-async requests
                 async with self.semaphore:
@@ -120,20 +119,22 @@ class Queries(object):
                         url,
                         headers=headers,
                         params=tuple(params.items()),
+                        timeout=30,
                     )
                     if r_requests.status_code == 202:
                         if warm:
-                            return dict()
-                        print(f"Path {path} returned 202. Retrying in {2**attempt}s...")
+                            return {}
+                        print(
+                            f"Path {path} returned 202. Retrying in {2**attempt}s...")
                         await asyncio.sleep(2**attempt)
                         continue
-                    elif r_requests.status_code == 200:
+                    if r_requests.status_code == 200:
                         return r_requests.json()
 
         print(
             f"There were too many 202s or errors. Data for {path} will be incomplete."
         )
-        return dict()
+        return {}
 
     @staticmethod
     def repos_overview(
@@ -153,7 +154,7 @@ class Queries(object):
             direction: DESC
         }},
         isFork: false,
-        after: {"null" if owned_cursor is None else '"'+ owned_cursor +'"'}
+        after: {"null" if owned_cursor is None else '"' + owned_cursor + '"'}
     ) {{
       pageInfo {{
         hasNextPage
@@ -189,7 +190,7 @@ class Queries(object):
             REPOSITORY,
             PULL_REQUEST_REVIEW
         ]
-        after: {"null" if contrib_cursor is None else '"'+ contrib_cursor +'"'}
+        after: {"null" if contrib_cursor is None else '"' + contrib_cursor + '"'}
     ) {{
       pageInfo {{
         hasNextPage
@@ -264,7 +265,7 @@ query {{
 """
 
 
-class Stats(object):
+class Stats:
     """
     Retrieve and store statistics about GitHub usage.
     """
@@ -321,7 +322,7 @@ Languages:
         """
         self._stargazers = 0
         self._forks = 0
-        self._languages = dict()
+        self._languages = {}
         self._repos = set()
 
         exclude_langs_lower = {x.lower() for x in self._exclude_langs}
@@ -336,7 +337,8 @@ Languages:
             )
             raw_results = raw_results if raw_results is not None else {}
 
-            self._name = raw_results.get("data", {}).get("viewer", {}).get("name", None)
+            self._name = raw_results.get("data", {}).get(
+                "viewer", {}).get("name", None)
             if self._name is None:
                 self._name = (
                     raw_results.get("data", {})
@@ -350,7 +352,8 @@ Languages:
                 .get("repositoriesContributedTo", {})
             )
             owned_repos = (
-                raw_results.get("data", {}).get("viewer", {}).get("repositories", {})
+                raw_results.get("data", {}).get(
+                    "viewer", {}).get("repositories", {})
             )
 
             repos = owned_repos.get("nodes", [])
@@ -394,10 +397,8 @@ Languages:
             else:
                 break
 
-        # TODO: Improve languages to scale by number of contributions to
-        #       specific filetypes
-        langs_total = sum([v.get("size", 0) for v in self._languages.values()])
-        for k, v in self._languages.items():
+        langs_total = sum(v.get("size", 0) for v in self._languages.values())
+        for _, v in self._languages.items():
             v["prop"] = 100 * (v.get("size", 0) / langs_total)
 
     @property
@@ -551,11 +552,6 @@ Languages:
 
         self._views = total
         return total
-
-
-###############################################################################
-# Main Function
-###############################################################################
 
 
 async def main() -> None:
